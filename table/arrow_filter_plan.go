@@ -40,6 +40,7 @@ import (
 // per-row-group maps.
 type compiledFileFilterPlan struct {
 	statsFilter     iceberg.BooleanExpression
+	statsFieldIDs   []int
 	bloomPreds      []tblutils.RowGroupBloomPred
 	dictionaryPreds []tblutils.RowGroupDictionaryPred
 
@@ -370,8 +371,13 @@ func compileFileFilterPlan(
 		if err != nil {
 			return nil, err
 		}
+		statsFieldIDs, err := iceberg.ExtractFieldIDs(statsFilter)
+		if err != nil {
+			return nil, err
+		}
 
 		plan.statsFilter = statsFilter
+		plan.statsFieldIDs = statsFieldIDs
 		plan.bloomPreds = bloomPreds
 		plan.dictionaryPreds = dictionaryPreds
 	}
@@ -387,7 +393,7 @@ func compileFileFilterPlan(
 		return plan, nil
 	}
 
-	extSet, recordFilter, err := substrait.ConvertExpr(recordSchema, boundFilter, caseSensitive)
+	extSet, recordFilter, err := substrait.ConvertExpr(recordSchema, boundFilter)
 	if err != nil {
 		return nil, err
 	}

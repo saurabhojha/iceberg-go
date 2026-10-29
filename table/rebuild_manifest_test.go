@@ -137,6 +137,7 @@ func TestRebuildSnapshotUpdates_CallsClosureWithFreshParent(t *testing.T) {
 		MainBranch,
 		iceio.LocalFS{},
 		1,
+		false,
 	)
 	require.NoError(t, err)
 	require.Len(t, rebuilt, 1)
@@ -174,8 +175,8 @@ func TestStagedSnapshotStillValid(t *testing.T) {
 		{"v1 ignores sequence numbers", v1, &Snapshot{}, true},
 		{"v2 sequence number ahead", v2, &Snapshot{SequenceNumber: v2.LastSequenceNumber() + 1}, true},
 		{"v2 sequence number equal", v2, &Snapshot{SequenceNumber: v2.LastSequenceNumber()}, false},
-		{"v3 first-row-id at the cursor", v3, &Snapshot{SequenceNumber: v3.LastSequenceNumber() + 1, FirstRowID: ptr(v3.NextRowID())}, true},
-		{"v3 first-row-id behind", v3, &Snapshot{SequenceNumber: v3.LastSequenceNumber() + 1, FirstRowID: ptr(v3.NextRowID() - 1)}, false},
+		{"v3 first-row-id at the cursor", v3, &Snapshot{SequenceNumber: v3.LastSequenceNumber() + 1, FirstRowID: new(v3.NextRowID())}, true},
+		{"v3 first-row-id behind", v3, &Snapshot{SequenceNumber: v3.LastSequenceNumber() + 1, FirstRowID: new(v3.NextRowID() - 1)}, false},
 		{"v3 first-row-id missing", v3, &Snapshot{SequenceNumber: v3.LastSequenceNumber() + 1}, false},
 		{"nil fresh metadata", nil, &Snapshot{}, true},
 	}
@@ -225,6 +226,7 @@ func TestRebuildSnapshotUpdates_SkipsWhenParentUnchanged(t *testing.T) {
 		MainBranch,
 		iceio.LocalFS{},
 		1,
+		false,
 	)
 	require.NoError(t, err)
 	assert.False(t, called, "rebuild closure must not be called when parent is already up-to-date")
@@ -259,6 +261,7 @@ func TestRebuildSnapshotUpdates_RebuildsWhenTableStateMoved(t *testing.T) {
 		MainBranch,
 		iceio.LocalFS{},
 		1,
+		false,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, receivedParent, "the rebuild must run even though the parent is unchanged")
@@ -287,6 +290,7 @@ func TestRebuildSnapshotUpdates_PassesThroughNonRebuildUpdates(t *testing.T) {
 		MainBranch,
 		iceio.LocalFS{},
 		0,
+		false,
 	)
 	require.NoError(t, err)
 	assert.Empty(t, orphaned)
@@ -315,7 +319,7 @@ func TestRebuildSnapshotUpdates_PropagatesClosureError(t *testing.T) {
 		},
 	}
 
-	_, _, err := rebuildSnapshotUpdates(t.Context(), []Update{upd}, freshMeta, MainBranch, iceio.LocalFS{}, 1)
+	_, _, err := rebuildSnapshotUpdates(t.Context(), []Update{upd}, freshMeta, MainBranch, iceio.LocalFS{}, 1, false)
 	assert.ErrorIs(t, err, wantErr)
 }
 
@@ -510,9 +514,9 @@ func TestRebuildFn_SummaryRebasedAgainstFreshParent(t *testing.T) {
 
 	// Write an empty manifest list for the freshParent so Manifests() can open it.
 	parentManifestListPath := "mem://default/table-location/metadata/fresh-parent-snap.avro"
-	out, createErr := wfs.Create(parentManifestListPath)
+	out, createErr := wfs.Create(context.Background(), parentManifestListPath)
 	require.NoError(t, createErr)
-	writeErr := iceberg.WriteManifestList(2, out, 77, nil, ptr(int64(0)), 0, nil)
+	writeErr := iceberg.WriteManifestList(2, out, 77, nil, new(int64(0)), 0, nil)
 	require.NoError(t, writeErr)
 	require.NoError(t, out.Close())
 

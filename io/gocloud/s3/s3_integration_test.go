@@ -34,9 +34,8 @@ import (
 	"github.com/uptrace/bun/driver/sqliteshim"
 )
 
-func TestMinioWarehouse(t *testing.T) {
-	_, err := recipe.Start(t)
-	require.NoError(t, err)
+func TestS3Warehouse(t *testing.T) {
+	require.NoError(t, recipe.Start(t))
 
 	cat, err := catalog.Load(context.Background(), "default", iceberg.Properties{
 		"uri":                ":memory:",
@@ -66,9 +65,8 @@ func TestMinioWarehouse(t *testing.T) {
 	require.NotNil(t, tbl)
 }
 
-func TestMinioWarehouseNoLocation(t *testing.T) {
-	_, err := recipe.Start(t)
-	require.NoError(t, err)
+func TestS3WarehouseNoLocation(t *testing.T) {
+	require.NoError(t, recipe.Start(t))
 
 	cat, err := catalog.Load(context.Background(), "default", iceberg.Properties{
 		"uri":                ":memory:",

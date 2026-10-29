@@ -20,6 +20,7 @@ package table_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/apache/iceberg-go/table"
@@ -228,7 +229,7 @@ func TestParseRequirementAcceptsExplicitZero(t *testing.T) {
 		{name: "default sort order id", data: `{"type":"assert-default-sort-order-id","default-sort-order-id":0}`, expected: table.AssertDefaultSortOrderID(0)},
 		{name: "last assigned field id", data: `{"type":"assert-last-assigned-field-id","last-assigned-field-id":0}`, expected: table.AssertLastAssignedFieldID(0)},
 		{name: "last assigned partition id", data: `{"type":"assert-last-assigned-partition-id","last-assigned-partition-id":0}`, expected: table.AssertLastAssignedPartitionID(0)},
-		{name: "snapshot id", data: `{"type":"assert-ref-snapshot-id","ref":"main","snapshot-id":0}`, expected: table.AssertRefSnapshotID("main", ptr(int64(0)))},
+		{name: "snapshot id", data: `{"type":"assert-ref-snapshot-id","ref":"main","snapshot-id":0}`, expected: table.AssertRefSnapshotID("main", new(int64(0)))},
 	}
 
 	for _, tt := range tests {
@@ -261,7 +262,7 @@ func TestParseRequirementRefRequiresRefButAllowsNullSnapshotID(t *testing.T) {
 func TestParseRequirementRefAcceptsNumericSnapshotID(t *testing.T) {
 	actual, err := table.ParseRequirementBytes([]byte(`{"type":"assert-ref-snapshot-id","ref":"main","snapshot-id":42}`))
 	require.NoError(t, err)
-	assert.Equal(t, table.AssertRefSnapshotID("main", ptr(int64(42))), actual)
+	assert.Equal(t, table.AssertRefSnapshotID("main", new(int64(42))), actual)
 }
 
 func TestAssertRefSnapshotIDValidate(t *testing.T) {
@@ -269,12 +270,12 @@ func TestAssertRefSnapshotIDValidate(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("matching ref passes", func(t *testing.T) {
-		req := table.AssertRefSnapshotID("test", ptr(int64(3051729675574597004)))
+		req := table.AssertRefSnapshotID("test", new(int64(3051729675574597004)))
 		assert.NoError(t, req.Validate(meta))
 	})
 
 	t.Run("mismatched snapshot id includes expected and found", func(t *testing.T) {
-		req := table.AssertRefSnapshotID("test", ptr(int64(1)))
+		req := table.AssertRefSnapshotID("test", new(int64(1)))
 		err := req.Validate(meta)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `"test"`)
@@ -292,7 +293,7 @@ func TestAssertRefSnapshotIDValidate(t *testing.T) {
 	})
 
 	t.Run("ref missing but expected includes expected snapshot", func(t *testing.T) {
-		req := table.AssertRefSnapshotID("nonexistent", ptr(int64(42)))
+		req := table.AssertRefSnapshotID("nonexistent", new(int64(42)))
 		err := req.Validate(meta)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `"nonexistent"`)
@@ -301,7 +302,7 @@ func TestAssertRefSnapshotIDValidate(t *testing.T) {
 	})
 
 	t.Run("nil metadata returns error", func(t *testing.T) {
-		req := table.AssertRefSnapshotID("main", ptr(int64(1)))
+		req := table.AssertRefSnapshotID("main", new(int64(1)))
 		assert.Error(t, req.Validate(nil))
 	})
 
@@ -309,4 +310,36 @@ func TestAssertRefSnapshotIDValidate(t *testing.T) {
 		req := table.AssertRefSnapshotID("nonexistent", nil)
 		assert.NoError(t, req.Validate(meta))
 	})
+}
+
+func TestRequirementFailuresAreCommitConflicts(t *testing.T) {
+	meta, err := table.ParseMetadataBytes([]byte(table.ExampleTableMetadataV2))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name string
+		req  table.Requirement
+		meta table.Metadata
+	}{
+		{"table already exists", table.AssertCreate(), meta},
+		{"table uuid mismatch", table.AssertTableUUID(uuid.New()), meta},
+		{"table metadata missing", table.AssertTableUUID(meta.TableUUID()), nil},
+		{"ref has changed", table.AssertRefSnapshotID("test", new(int64(1))), meta},
+		{"ref created concurrently", table.AssertRefSnapshotID("test", nil), meta},
+		{"ref missing", table.AssertRefSnapshotID("nonexistent", new(int64(1))), meta},
+		{"last assigned field id changed", table.AssertLastAssignedFieldID(meta.LastColumnID() + 1), meta},
+		{"current schema id changed", table.AssertCurrentSchemaID(meta.CurrentSchema().ID + 1), meta},
+		{"last assigned partition id changed", table.AssertLastAssignedPartitionID(*meta.LastPartitionSpecID() + 1), meta},
+		{"default spec id changed", table.AssertDefaultSpecID(meta.DefaultPartitionSpec() + 1), meta},
+		{"default sort order id changed", table.AssertDefaultSortOrderID(meta.DefaultSortOrder() + 1), meta},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.req.Validate(tt.meta)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, table.ErrCommitFailed)
+			assert.Contains(t, strings.ToLower(err.Error()), "requirement failed")
+		})
+	}
 }

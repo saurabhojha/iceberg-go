@@ -19,6 +19,7 @@ package table_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -145,8 +146,8 @@ func TestDeserializeSnapshotWithEmbeddedManifestLocations(t *testing.T) {
 
 	assert.Equal(t, paths, snapshot.ManifestLocations)
 	fs := iceio.NewMemFS()
-	require.NoError(t, fs.WriteFile(paths[0], []byte("manifest-one")))
-	require.NoError(t, fs.WriteFile(paths[1], []byte("manifest-two-longer")))
+	require.NoError(t, fs.WriteFile(context.Background(), paths[0], []byte("manifest-one")))
+	require.NoError(t, fs.WriteFile(context.Background(), paths[1], []byte("manifest-two-longer")))
 
 	manifests, err := snapshot.Manifests(fs)
 	require.NoError(t, err)
@@ -370,32 +371,32 @@ func TestValidateRowLineage(t *testing.T) {
 		},
 		{
 			name:       "valid: both set",
-			firstRowID: ptr(int64(0)),
-			addedRows:  ptr(int64(100)),
+			firstRowID: new(int64(0)),
+			addedRows:  new(int64(100)),
 			wantErr:    "",
 		},
 		{
 			name:       "valid: zero added rows",
-			firstRowID: ptr(int64(30)),
-			addedRows:  ptr(int64(0)),
+			firstRowID: new(int64(30)),
+			addedRows:  new(int64(0)),
 			wantErr:    "",
 		},
 		{
 			name:       "invalid: first-row-id set but added-rows nil",
-			firstRowID: ptr(int64(0)),
+			firstRowID: new(int64(0)),
 			addedRows:  nil,
 			wantErr:    "added-rows is required when first-row-id is set",
 		},
 		{
 			name:       "invalid: negative added-rows",
-			firstRowID: ptr(int64(0)),
-			addedRows:  ptr(int64(-1)),
+			firstRowID: new(int64(0)),
+			addedRows:  new(int64(-1)),
 			wantErr:    "added-rows cannot be negative: -1",
 		},
 		{
 			name:       "invalid: negative first-row-id",
-			firstRowID: ptr(int64(-1)),
-			addedRows:  ptr(int64(100)),
+			firstRowID: new(int64(-1)),
+			addedRows:  new(int64(100)),
 			wantErr:    "first-row-id cannot be negative: -1",
 		},
 	}
@@ -417,10 +418,6 @@ func TestValidateRowLineage(t *testing.T) {
 			}
 		})
 	}
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }
 
 func TestSnapshotUnmarshalRequiresSnapshotIDAndTimestamp(t *testing.T) {

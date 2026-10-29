@@ -174,8 +174,8 @@ func TestApplyResultDeleteMetrics(t *testing.T) {
 	// the whole Puffin file size, so filesize (the Puffin length) must be ignored.
 	dv := &dvMockDataFile{
 		mockDataFile:       mockDataFile{path: "s3://b/deletes.puffin", filesize: 9999},
-		referencedDataFile: strPtr("s3://b/data-2.parquet"),
-		contentSizeInBytes: int64Ptr(10),
+		referencedDataFile: new("s3://b/data-2.parquet"),
+		contentSizeInBytes: new(int64(10)),
 	}
 
 	// posA applies to both data-file tasks: matching Java's per-task
@@ -216,12 +216,12 @@ func TestApplyResultDeleteMetricsDVsShareOnePuffin(t *testing.T) {
 	dv1 := &dvMockDataFile{
 		mockDataFile:       mockDataFile{path: puffin, filesize: 9999},
 		referencedDataFile: &ref1,
-		contentSizeInBytes: int64Ptr(30),
+		contentSizeInBytes: new(int64(30)),
 	}
 	dv2 := &dvMockDataFile{
 		mockDataFile:       mockDataFile{path: puffin, filesize: 9999},
 		referencedDataFile: &ref2,
-		contentSizeInBytes: int64Ptr(70),
+		contentSizeInBytes: new(int64(70)),
 	}
 
 	tasks := []FileScanTask{
@@ -303,18 +303,18 @@ func TestPlanFilesEmitsReportForRealSnapshot(t *testing.T) {
 
 	df := newTestDataFile(t, spec, "mem://default/table-location/data-1.parquet", nil)
 	entries := []iceberg.ManifestEntry{
-		iceberg.NewManifestEntry(iceberg.EntryStatusADDED, int64Ptr(snapshotID), nil, nil, df),
+		iceberg.NewManifestEntry(iceberg.EntryStatusADDED, new(snapshotID), nil, nil, df),
 	}
 	var manifestBuf bytes.Buffer
 	manifest, err := iceberg.WriteManifest(manifestPath, &manifestBuf, 2, spec, schema, snapshotID, entries)
 	require.NoError(t, err)
-	require.NoError(t, memIO.WriteFile(manifestPath, manifestBuf.Bytes()))
+	require.NoError(t, memIO.WriteFile(context.Background(), manifestPath, manifestBuf.Bytes()))
 
 	var listBuf bytes.Buffer
 	seqNum := int64(1)
 	require.NoError(t, iceberg.WriteManifestList(2, &listBuf, snapshotID, nil, &seqNum, 0,
 		[]iceberg.ManifestFile{manifest}))
-	require.NoError(t, memIO.WriteFile(manifestListPath, listBuf.Bytes()))
+	require.NoError(t, memIO.WriteFile(context.Background(), manifestListPath, listBuf.Bytes()))
 
 	snapID := snapshotID
 	txn.meta.snapshotList = []Snapshot{{

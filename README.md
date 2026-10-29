@@ -25,7 +25,7 @@
 
 ### Prerequisites
 
-* Go 1.25 or later
+* Go 1.26 or later
 
 ### Build
 
@@ -54,7 +54,7 @@ Install the linter first
 
 ```shell
 make lint-install
-# or: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+# or: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
 ```
 
 ### Integration tests
@@ -70,7 +70,7 @@ make lint-install
 2. Export the required environment variables:
 
    ```shell
-   export AWS_S3_ENDPOINT=http://$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' minio):9000
+   export AWS_S3_ENDPOINT=http://$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' object-store):9000
    export AWS_REGION=us-east-1
    export SPARK_CONTAINER_ID=$(docker ps -qf 'name=spark-iceberg')
    export DOCKER_API_VERSION=$(docker version -f '{{.Server.APIVersion}}')
@@ -138,14 +138,34 @@ submission, polling, and task retrieval. Cancellation is best-effort and is not
 required for automatic remote planning. In `auto` mode, catalogs
 without a planner retain local planning.
 
-The scanner does not honor the REST `scan-planning-mode` configuration key
-(`client`/`server`). A catalog requiring `server` mode may rely on planning to
-vend plan-scoped storage credentials. Default local planning, explicit `local`,
-or an `auto` fallback can instead read manifests with the table's storage
-credentials, which may use a different identity or lack the required access.
-For these deployments, explicitly select `table.ScanPlanningRemote` on every
-scan; do not rely on the server configuration or `auto` to enforce remote
-planning. Remote mode returns an error if a required capability is missing.
+Scans follow the catalog's `scan-planning-mode` directive (`client`/`server`).
+The directive is resolved with the same precedence as the Java client: the
+table-load response's `config` block wins, and the catalog's own
+`scan-planning-mode` property (including `/v1/config` defaults and overrides)
+applies when the server sends none. A mismatch between the two is logged.
+Read it with `tbl.ScanPlanningDirective()`.
+
+| Directive | Scan option | Result |
+| :-------- | :---------- | :----- |
+| `server` | none, `auto`, or `remote` | Plan remotely. |
+| `server` | `local` | Error. |
+| `client` | none, `auto`, or `local` | Plan locally. |
+| `client` | `remote` | Error. |
+| none | any | As described above. |
+
+Some behaviors are specific to this client. The directive is checked when a
+scan is planned, not when the table is loaded, so a `server` table whose
+catalog does not advertise the plan endpoint can still be loaded and committed
+to; planning it returns an error. An unrecognized directive value likewise
+fails only at planning. An explicit scan option that conflicts with the
+directive is rejected rather than overridden. And incremental append and
+changelog scans, which only plan locally, return an error on a `server` table,
+where the Java client plans them locally.
+
+Scans inside a transaction plan staged metadata locally and do not apply the
+directive. Commit responses carry no table
+config, so a table returned by `UpdateTable` keeps only the catalog's own
+`scan-planning-mode` property; reload it to obtain a per-table directive.
 
 ```go
 // tbl is a table loaded from a rest.Catalog.

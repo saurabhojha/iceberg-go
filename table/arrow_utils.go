@@ -29,6 +29,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/apache/arrow-go/v18/arrow"
 	"github.com/apache/arrow-go/v18/arrow/array"
@@ -46,7 +47,6 @@ import (
 	tblutils "github.com/apache/iceberg-go/table/internal"
 	"github.com/geoarrow/geoarrow-go"
 	"github.com/google/uuid"
-	"github.com/pterm/pterm"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -393,7 +393,7 @@ func (c convertToIceberg) Primitive(dt arrow.DataType) (result iceberg.NestedFie
 		result.Type = iceberg.PrimitiveTypes.Float64
 	case *arrow.Decimal32Type, *arrow.Decimal64Type, *arrow.Decimal128Type:
 		dec := dt.(arrow.DecimalType)
-		result.Type = iceberg.DecimalTypeOf(int(dec.GetPrecision()), int(dec.GetScale()))
+		result.Type = iceberg.MustDecimalTypeOf(int(dec.GetPrecision()), int(dec.GetScale()))
 	case *arrow.StringType, *arrow.LargeStringType:
 		result.Type = iceberg.PrimitiveTypes.String
 	case *arrow.BinaryType, *arrow.LargeBinaryType:
@@ -431,7 +431,7 @@ func (c convertToIceberg) Primitive(dt arrow.DataType) (result iceberg.NestedFie
 			panic(fmt.Errorf("%w: unsupported arrow type for conversion - %s", iceberg.ErrInvalidSchema, dt))
 		}
 	case *arrow.FixedSizeBinaryType:
-		result.Type = iceberg.FixedTypeOf(dt.ByteWidth)
+		result.Type = iceberg.MustFixedTypeOf(dt.ByteWidth)
 	case arrow.ExtensionType:
 		switch dt.ExtensionName() {
 		case "arrow.uuid":
@@ -662,7 +662,8 @@ func (c convertToArrow) Map(m iceberg.MapType, keyResult, valResult arrow.Field)
 }
 
 func (c convertToArrow) Primitive(iceberg.PrimitiveType) arrow.Field { panic("shouldn't be called") }
-func (c convertToArrow) Variant(iceberg.VariantType) arrow.Field     { panic("shouldn't be called") }
+
+func (c convertToArrow) Variant(iceberg.VariantType) arrow.Field { panic("shouldn't be called") }
 
 func (c convertToArrow) VisitFixed(f iceberg.FixedType) arrow.Field {
 	return arrow.Field{Type: &arrow.FixedSizeBinaryType{ByteWidth: f.Len()}}
@@ -1507,13 +1508,13 @@ func arrowSchemaEqual(left, right *arrow.Schema) bool {
 type schemaCompatVisitor struct {
 	provided *iceberg.Schema
 
-	errorData pterm.TableData
+	errorData [][]string
 }
 
 func checkSchemaCompat(requested, provided *iceberg.Schema) error {
 	sc := &schemaCompatVisitor{
 		provided:  provided,
-		errorData: pterm.TableData{{"", "Table Field", "Requested Field"}},
+		errorData: [][]string{{"", "Table Field", "Requested Field"}},
 	}
 
 	_, compat := iceberg.PreOrderVisit(requested, sc)
@@ -1615,12 +1616,20 @@ func (sc *schemaCompatVisitor) isFieldCompat(lhs iceberg.NestedField) bool {
 
 func (sc *schemaCompatVisitor) Schema(s *iceberg.Schema, v func() bool) bool {
 	if !v() {
-		pterm.DisableColor()
-		tbl := pterm.DefaultTable.WithHasHeader(true).WithData(sc.errorData)
-		tbl.Render()
-		txt, _ := tbl.Srender()
-		pterm.EnableColor()
-		panic("mismatch in fields:\n" + txt)
+		// Render the collected mismatch rows into the error message with the
+		// stdlib tabwriter. Unlike the former pterm renderer this writes only to
+		// the returned error and has no stdout side effect. tabwriter measures
+		// column width by rune count, so the leading status column (✅/❌) may be
+		// off by one display cell in terminals that render those double-width;
+		// the reported content is unaffected.
+		var buf strings.Builder
+		w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+		for _, row := range sc.errorData {
+			fmt.Fprintln(w, strings.Join(row, "\t"))
+		}
+		_ = w.Flush()
+
+		panic("mismatch in fields:\n" + buf.String())
 	}
 
 	return true
@@ -1872,7 +1881,7 @@ func filesToDataFiles(ctx context.Context, fileIO iceio.IO, meta *MetadataBuilde
 				}
 			}()
 
-			// Pass 0 so AddFiles does not claim sort_order_id on files
+			// Pass 0 so AddDataFilesByPath does not claim sort_order_id on files
 			// it did not write (#1184). Callers that know the file's
 			// sort layout use FileToDataFile with an explicit id.
 			dataFiles[i] = fileToDataFile(ctx, fileIO, filePath, currentSchema, currentSpec, 0, meta.props)
@@ -2211,7 +2220,7 @@ func positionDeleteRecordsToDataFiles(ctx context.Context, rootLocation string, 
 	// does not expose a property to opt out. The DV path threads each data
 	// file's spec id and partition record through DVWriter so partitioned
 	// outputs carry the correct manifest-entry partition.
-	if latestMetadata.Version() >= 3 {
+	if latestMetadata.FormatVersion() >= 3 {
 		return positionDeleteRecordsToDataFilesDV(ctx, rootLocation, args, latestMetadata, partitionContextByFilePath)
 	}
 

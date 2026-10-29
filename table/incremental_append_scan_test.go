@@ -301,7 +301,7 @@ func TestIncrementalAppendScanPrunesManifestSummariesBeforeOpening(t *testing.T)
 		manifest, err := iceberg.WriteManifest(manifestPath, &manifestBuf, 2, spec, schema, snapshotID,
 			[]iceberg.ManifestEntry{entry})
 		require.NoError(t, err)
-		require.NoError(t, fs.WriteFile(manifestPath, manifestBuf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), manifestPath, manifestBuf.Bytes()))
 
 		return manifest
 	}
@@ -312,7 +312,7 @@ func TestIncrementalAppendScanPrunesManifestSummariesBeforeOpening(t *testing.T)
 	seqNum := int64(1)
 	require.NoError(t, iceberg.WriteManifestList(2, &manifestListBuf, 1, nil, &seqNum, 0,
 		[]iceberg.ManifestFile{matchingManifest, irrelevantManifest}))
-	require.NoError(t, fs.WriteFile(manifestListPath, manifestListBuf.Bytes()))
+	require.NoError(t, fs.WriteFile(context.Background(), manifestListPath, manifestListBuf.Bytes()))
 
 	meta, err := NewMetadata(schema, &spec, UnsortedSortOrder, "mem://default/incremental", nil)
 	require.NoError(t, err)
@@ -355,7 +355,7 @@ func incrementalAppendTestTable(t *testing.T) *Table {
 		var manifestBuf bytes.Buffer
 		manifest, err := iceberg.WriteManifest(manifestPath, &manifestBuf, 2, spec, schema, snapshotID, []iceberg.ManifestEntry{entry})
 		require.NoError(t, err)
-		require.NoError(t, fs.WriteFile(manifestPath, manifestBuf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), manifestPath, manifestBuf.Bytes()))
 
 		return manifest
 	}
@@ -371,11 +371,11 @@ func incrementalAppendTestTable(t *testing.T) *Table {
 		var listBuf bytes.Buffer
 		seqNum := snapshotID
 		require.NoError(t, iceberg.WriteManifestList(2, &listBuf, snapshotID, nil, &seqNum, 0, manifests))
-		require.NoError(t, fs.WriteFile(path, listBuf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), path, listBuf.Bytes()))
 	}
 	manifestList1Path := "mem://default/table-location/metadata/snap-1.avro"
 	writeManifestList(1, manifestList1Path, []iceberg.ManifestFile{manifest1})
-	listFile, err := fs.Open(manifestList1Path)
+	listFile, err := fs.Open(context.Background(), manifestList1Path)
 	require.NoError(t, err)
 	manifestList1, err := iceberg.ReadManifestList(listFile)
 	require.NoError(t, err)
@@ -384,7 +384,7 @@ func incrementalAppendTestTable(t *testing.T) *Table {
 
 	txn.meta.snapshotList = []Snapshot{
 		{SnapshotID: 1, TimestampMs: 1000, ManifestList: "mem://default/table-location/metadata/snap-1.avro", SequenceNumber: 1, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 2, ParentSnapshotID: int64Ptr(1), TimestampMs: 2000, ManifestList: "mem://default/table-location/metadata/snap-2.avro", SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 2, ParentSnapshotID: new(int64(1)), TimestampMs: 2000, ManifestList: "mem://default/table-location/metadata/snap-2.avro", SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
 	}
 	txn.meta.snapshotLog = []SnapshotLogEntry{
 		{SnapshotID: 1, TimestampMs: 1000},
@@ -431,7 +431,7 @@ func incrementalAppendMixedOperationTable(t *testing.T) *Table {
 		manifest, err := iceberg.WriteManifest(manifestPath, &manifestBuf, 2, spec, schema,
 			snapshotID, []iceberg.ManifestEntry{entry})
 		require.NoError(t, err)
-		require.NoError(t, fs.WriteFile(manifestPath, manifestBuf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), manifestPath, manifestBuf.Bytes()))
 
 		return manifest
 	}
@@ -442,8 +442,8 @@ func incrementalAppendMixedOperationTable(t *testing.T) *Table {
 		sequenceNumber := snapshotID
 		require.NoError(t, iceberg.WriteManifestList(2, &listBuf, snapshotID, nil,
 			&sequenceNumber, 0, manifests))
-		require.NoError(t, fs.WriteFile(path, listBuf.Bytes()))
-		listFile, err := fs.Open(path)
+		require.NoError(t, fs.WriteFile(context.Background(), path, listBuf.Bytes()))
+		listFile, err := fs.Open(context.Background(), path)
 		require.NoError(t, err)
 		manifestList, err := iceberg.ReadManifestList(listFile)
 		require.NoError(t, err)
@@ -461,8 +461,8 @@ func incrementalAppendMixedOperationTable(t *testing.T) *Table {
 
 	txn.meta.snapshotList = []Snapshot{
 		{SnapshotID: 1, TimestampMs: 1000, ManifestList: listAPath, SequenceNumber: 1, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 2, ParentSnapshotID: int64Ptr(1), TimestampMs: 2000, ManifestList: listBPath, SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpOverwrite}},
-		{SnapshotID: 3, ParentSnapshotID: int64Ptr(2), TimestampMs: 3000, ManifestList: listCPath, SequenceNumber: 3, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 2, ParentSnapshotID: new(int64(1)), TimestampMs: 2000, ManifestList: listBPath, SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpOverwrite}},
+		{SnapshotID: 3, ParentSnapshotID: new(int64(2)), TimestampMs: 3000, ManifestList: listCPath, SequenceNumber: 3, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
 	}
 	txn.meta.snapshotLog = []SnapshotLogEntry{
 		{SnapshotID: 1, TimestampMs: 1000},
@@ -532,8 +532,8 @@ func incrementalAppendDivergentTable(t *testing.T) *Table {
 	snapshots := []*Snapshot{
 		{SnapshotID: 10, TimestampMs: baseTimestamp + 1, SequenceNumber: 1, Summary: &Summary{Operation: OpAppend}},
 		{SnapshotID: 20, TimestampMs: baseTimestamp + 2, SequenceNumber: 2, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 21, ParentSnapshotID: int64Ptr(20), TimestampMs: baseTimestamp + 3, SequenceNumber: 3, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 22, ParentSnapshotID: int64Ptr(21), TimestampMs: baseTimestamp + 4, SequenceNumber: 4, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 21, ParentSnapshotID: new(int64(20)), TimestampMs: baseTimestamp + 3, SequenceNumber: 3, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 22, ParentSnapshotID: new(int64(21)), TimestampMs: baseTimestamp + 4, SequenceNumber: 4, Summary: &Summary{Operation: OpAppend}},
 	}
 	for _, snapshot := range snapshots {
 		require.NoError(t, builder.AddSnapshot(snapshot))
@@ -558,7 +558,7 @@ func incrementalAppendExpiredExclusiveTable(t *testing.T) *Table {
 		manifest, err := iceberg.WriteManifest(manifestPath, &manifestBuf, 2, spec, schema, snapshotID,
 			[]iceberg.ManifestEntry{entry})
 		require.NoError(t, err)
-		require.NoError(t, fs.WriteFile(manifestPath, manifestBuf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), manifestPath, manifestBuf.Bytes()))
 
 		return manifest
 	}
@@ -577,11 +577,11 @@ func incrementalAppendExpiredExclusiveTable(t *testing.T) *Table {
 		var listBuf bytes.Buffer
 		sequenceNumber := snapshotID
 		require.NoError(t, iceberg.WriteManifestList(2, &listBuf, snapshotID, nil, &sequenceNumber, 0, manifests))
-		require.NoError(t, fs.WriteFile(path, listBuf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), path, listBuf.Bytes()))
 	}
 	manifestListBPath := "mem://default/table-location/metadata/snap-b.avro"
 	writeManifestList(2, manifestListBPath, []iceberg.ManifestFile{manifestB})
-	listFile, err := fs.Open(manifestListBPath)
+	listFile, err := fs.Open(context.Background(), manifestListBPath)
 	require.NoError(t, err)
 	manifestListB, err := iceberg.ReadManifestList(listFile)
 	require.NoError(t, err)
@@ -615,7 +615,7 @@ func incrementalAppendExpiredExclusiveTable(t *testing.T) *Table {
 		},
 		{
 			SnapshotID:       3,
-			ParentSnapshotID: int64Ptr(2),
+			ParentSnapshotID: new(int64(2)),
 			TimestampMs:      3000,
 			ManifestList:     manifestListCPath,
 			SequenceNumber:   3,

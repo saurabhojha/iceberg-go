@@ -97,7 +97,7 @@ func TestOpenManifestWithOptionsCanDiscardExistingEntries(t *testing.T) {
 	var buf bytes.Buffer
 	manifest, err := iceberg.WriteManifest(manifestPath, &buf, 2, spec, schema, snapshotID, entries)
 	require.NoError(t, err)
-	require.NoError(t, fs.WriteFile(manifestPath, buf.Bytes()))
+	require.NoError(t, fs.WriteFile(context.Background(), manifestPath, buf.Bytes()))
 
 	partitionCalls := 0
 	metricsCalls := 0
@@ -463,8 +463,8 @@ func incrementalChangelogDivergentTable(t *testing.T) *Table {
 	baseTimestamp := base.LastUpdatedMillis()
 	snapshots := []*Snapshot{
 		{SnapshotID: 1, TimestampMs: baseTimestamp + 1, SequenceNumber: 1, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 2, ParentSnapshotID: int64Ptr(1), TimestampMs: baseTimestamp + 2, SequenceNumber: 2, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 3, ParentSnapshotID: int64Ptr(1), TimestampMs: baseTimestamp + 3, SequenceNumber: 3, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 2, ParentSnapshotID: new(int64(1)), TimestampMs: baseTimestamp + 2, SequenceNumber: 2, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 3, ParentSnapshotID: new(int64(1)), TimestampMs: baseTimestamp + 3, SequenceNumber: 3, Summary: &Summary{Operation: OpAppend}},
 	}
 	for _, snapshot := range snapshots {
 		require.NoError(t, builder.AddSnapshot(snapshot))
@@ -500,7 +500,7 @@ func incrementalChangelogTestTable(t *testing.T) *Table {
 		var buf bytes.Buffer
 		manifest, err := iceberg.WriteManifest(path, &buf, 2, spec, schema, snapshotID, entries)
 		require.NoError(t, err)
-		require.NoError(t, fs.WriteFile(path, buf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), path, buf.Bytes()))
 
 		return manifest
 	}
@@ -509,9 +509,9 @@ func incrementalChangelogTestTable(t *testing.T) *Table {
 		sequenceNumber := snapshotID
 		require.NoError(t, iceberg.WriteManifestList(2, &buf, snapshotID, nil,
 			&sequenceNumber, 0, manifests))
-		require.NoError(t, fs.WriteFile(path, buf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), path, buf.Bytes()))
 
-		listFile, err := fs.Open(path)
+		listFile, err := fs.Open(context.Background(), path)
 		require.NoError(t, err)
 		list, err := iceberg.ReadManifestList(listFile)
 		require.NoError(t, err)
@@ -555,9 +555,9 @@ func incrementalChangelogTestTable(t *testing.T) *Table {
 
 	txn.meta.snapshotList = []Snapshot{
 		{SnapshotID: 1, TimestampMs: 1000, ManifestList: listOnePath, SequenceNumber: 1, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 2, ParentSnapshotID: int64Ptr(1), TimestampMs: 2000, ManifestList: listTwoPath, SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpOverwrite}},
-		{SnapshotID: 3, ParentSnapshotID: int64Ptr(2), TimestampMs: 3000, ManifestList: listThreePath, SequenceNumber: 3, SchemaID: &schema.ID, Summary: &Summary{Operation: OpReplace}},
-		{SnapshotID: 4, ParentSnapshotID: int64Ptr(3), TimestampMs: 4000, ManifestList: listFourPath, SequenceNumber: 4, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 2, ParentSnapshotID: new(int64(1)), TimestampMs: 2000, ManifestList: listTwoPath, SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpOverwrite}},
+		{SnapshotID: 3, ParentSnapshotID: new(int64(2)), TimestampMs: 3000, ManifestList: listThreePath, SequenceNumber: 3, SchemaID: &schema.ID, Summary: &Summary{Operation: OpReplace}},
+		{SnapshotID: 4, ParentSnapshotID: new(int64(3)), TimestampMs: 4000, ManifestList: listFourPath, SequenceNumber: 4, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
 	}
 	txn.meta.snapshotLog = []SnapshotLogEntry{
 		{SnapshotID: 1, TimestampMs: 1000},
@@ -600,7 +600,7 @@ func incrementalChangelogManifestRewriteTable(t *testing.T) *Table {
 		var buf bytes.Buffer
 		manifest, err := iceberg.WriteManifest(path, &buf, 2, spec, schema, snapshotID, entries)
 		require.NoError(t, err)
-		require.NoError(t, fs.WriteFile(path, buf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), path, buf.Bytes()))
 
 		return manifest
 	}
@@ -609,9 +609,9 @@ func incrementalChangelogManifestRewriteTable(t *testing.T) *Table {
 		sequenceNumber := snapshotID
 		require.NoError(t, iceberg.WriteManifestList(2, &buf, snapshotID, nil,
 			&sequenceNumber, 0, manifests))
-		require.NoError(t, fs.WriteFile(path, buf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), path, buf.Bytes()))
 
-		listFile, err := fs.Open(path)
+		listFile, err := fs.Open(context.Background(), path)
 		require.NoError(t, err)
 		list, err := iceberg.ReadManifestList(listFile)
 		require.NoError(t, err)
@@ -659,9 +659,9 @@ func incrementalChangelogManifestRewriteTable(t *testing.T) *Table {
 
 	txn.meta.snapshotList = []Snapshot{
 		{SnapshotID: 1, TimestampMs: 1000, ManifestList: listOnePath, SequenceNumber: 1, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 2, ParentSnapshotID: int64Ptr(1), TimestampMs: 2000, ManifestList: listTwoPath, SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 3, ParentSnapshotID: int64Ptr(2), TimestampMs: 3000, ManifestList: listThreePath, SequenceNumber: 3, SchemaID: &schema.ID, Summary: &Summary{Operation: OpReplace}},
-		{SnapshotID: 4, ParentSnapshotID: int64Ptr(3), TimestampMs: 4000, ManifestList: listFourPath, SequenceNumber: 4, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 2, ParentSnapshotID: new(int64(1)), TimestampMs: 2000, ManifestList: listTwoPath, SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 3, ParentSnapshotID: new(int64(2)), TimestampMs: 3000, ManifestList: listThreePath, SequenceNumber: 3, SchemaID: &schema.ID, Summary: &Summary{Operation: OpReplace}},
+		{SnapshotID: 4, ParentSnapshotID: new(int64(3)), TimestampMs: 4000, ManifestList: listFourPath, SequenceNumber: 4, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
 	}
 	txn.meta.snapshotLog = []SnapshotLogEntry{
 		{SnapshotID: 1, TimestampMs: 1000},
@@ -700,7 +700,7 @@ func incrementalChangelogDeleteManifestTable(t *testing.T) *Table {
 		manifest, err := iceberg.WriteManifest(path, &buf, 2, spec, schema, snapshotID,
 			[]iceberg.ManifestEntry{entry(iceberg.EntryStatusADDED, snapshotID, snapshotID, file)})
 		require.NoError(t, err)
-		require.NoError(t, fs.WriteFile(path, buf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), path, buf.Bytes()))
 
 		return manifest
 	}
@@ -709,9 +709,9 @@ func incrementalChangelogDeleteManifestTable(t *testing.T) *Table {
 		sequenceNumber := snapshotID
 		require.NoError(t, iceberg.WriteManifestList(2, &buf, snapshotID, nil,
 			&sequenceNumber, 0, manifests))
-		require.NoError(t, fs.WriteFile(path, buf.Bytes()))
+		require.NoError(t, fs.WriteFile(context.Background(), path, buf.Bytes()))
 
-		listFile, err := fs.Open(path)
+		listFile, err := fs.Open(context.Background(), path)
 		require.NoError(t, err)
 		list, err := iceberg.ReadManifestList(listFile)
 		require.NoError(t, err)
@@ -738,7 +738,7 @@ func incrementalChangelogDeleteManifestTable(t *testing.T) *Table {
 	deleteManifest, err := writer.ToManifestFile(deleteManifestPath, int64(deleteManifestBuf.Len()),
 		iceberg.WithManifestFileContent(iceberg.ManifestContentDeletes))
 	require.NoError(t, err)
-	require.NoError(t, fs.WriteFile(deleteManifestPath, deleteManifestBuf.Bytes()))
+	require.NoError(t, fs.WriteFile(context.Background(), deleteManifestPath, deleteManifestBuf.Bytes()))
 
 	listTwoPath := "mem://default/changelog-delete/metadata/snap-2.avro"
 	listTwo := writeManifestList(listTwoPath, 2, append(listOne, deleteManifest))
@@ -750,8 +750,8 @@ func incrementalChangelogDeleteManifestTable(t *testing.T) *Table {
 
 	txn.meta.snapshotList = []Snapshot{
 		{SnapshotID: 1, TimestampMs: 1000, ManifestList: listOnePath, SequenceNumber: 1, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
-		{SnapshotID: 2, ParentSnapshotID: int64Ptr(1), TimestampMs: 2000, ManifestList: listTwoPath, SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpDelete}},
-		{SnapshotID: 3, ParentSnapshotID: int64Ptr(2), TimestampMs: 3000, ManifestList: listThreePath, SequenceNumber: 3, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
+		{SnapshotID: 2, ParentSnapshotID: new(int64(1)), TimestampMs: 2000, ManifestList: listTwoPath, SequenceNumber: 2, SchemaID: &schema.ID, Summary: &Summary{Operation: OpDelete}},
+		{SnapshotID: 3, ParentSnapshotID: new(int64(2)), TimestampMs: 3000, ManifestList: listThreePath, SequenceNumber: 3, SchemaID: &schema.ID, Summary: &Summary{Operation: OpAppend}},
 	}
 	txn.meta.snapshotLog = []SnapshotLogEntry{
 		{SnapshotID: 1, TimestampMs: 1000},
@@ -774,11 +774,11 @@ type countingOpenIO struct {
 	afterOpen func()
 }
 
-func (io *countingOpenIO) Open(name string) (iceio.File, error) {
+func (io *countingOpenIO) Open(_ context.Context, name string) (iceio.File, error) {
 	io.opens.Add(1)
 	if io.afterOpen != nil {
 		io.afterOpen()
 	}
 
-	return io.IO.Open(name)
+	return io.IO.Open(context.Background(), name)
 }
